@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
 <title>Admin - Price List</title>
 <style>
   :root{--bg:#0b1220;--card:#121b2e;--card2:#17233b;--text:#e8eefc;--muted:#93a1c0;--accent:#22c55e;--accent2:#38bdf8;--border:#22304d;--danger:#ef4444}
@@ -16,6 +18,7 @@
   input,textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font:inherit;font-size:14px}
   input:focus,textarea:focus{outline:2px solid var(--accent2);outline-offset:-1px}
   textarea{min-height:84px;resize:vertical}
+  input[type=checkbox]{width:auto}
   .box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px}
   .cat-head{display:flex;gap:8px;align-items:flex-end}
   .cat-head > div{flex:1}
@@ -61,6 +64,17 @@
     <div class="box">
       <label for="wa">Nomor WhatsApp (format 62812xxxxxxx)</label>
       <input id="wa" inputmode="numeric" placeholder="6281234567890">
+    </div>
+
+    <div class="box">
+      <label style="margin-top:0"><b>Banner Promo</b> (muncul di paling atas website)</label>
+      <label style="display:flex;align-items:center;gap:8px;color:var(--text);font-size:14px"><input id="pEn" type="checkbox"> Aktifkan banner</label>
+      <label for="pText">Tulisan banner</label>
+      <input id="pText" maxlength="160" placeholder="🎉 Grand Opening! Diskon spesial semua paket">
+      <div class="row">
+        <div><label for="pStart">Mulai (kosong = langsung)</label><input id="pStart" type="date"></div>
+        <div><label for="pEnd">Berakhir (kosong = tanpa batas)</label><input id="pEnd" type="date"></div>
+      </div>
     </div>
 
     <div id="cats"></div>
@@ -117,6 +131,7 @@ async function loadData(){
 
 async function enter(){
   data = await loadData();
+  data.promo = Object.assign({ enabled: false, text: "", start: "", end: "" }, data.promo || {});
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
   render();
@@ -140,6 +155,10 @@ $("loginForm").addEventListener("submit", async e => {
 
 function render(){
   $("wa").value = data.waNumber || "";
+  $("pEn").checked = !!data.promo.enabled;
+  $("pText").value = data.promo.text || "";
+  $("pStart").value = data.promo.start || "";
+  $("pEnd").value = data.promo.end || "";
   $("cats").innerHTML = data.categories.map((c, ci) => `
     <div class="box cat" data-c="${ci}">
       <div class="cat-head">
@@ -155,6 +174,13 @@ function render(){
             <div><label>Harga (Rp)</label><input data-f="price" type="number" min="0" step="1000" value="${Number(p.price)||0}"></div>
             <div><label>Label (opsional, mis. Populer)</label><input data-f="badge" value="${esc(p.badge)}"></div>
           </div>
+          <div class="row">
+            <div><label>Harga promo (Rp), kosong = tanpa promo</label><input data-f="promoPrice" type="number" min="0" step="1000" value="${p.promoPrice ? Number(p.promoPrice) : ""}"></div>
+            <div><label>Mulai promo</label><input data-f="promoStart" type="date" value="${esc(p.promoStart)}"></div>
+            <div><label>Akhir promo</label><input data-f="promoEnd" type="date" value="${esc(p.promoEnd)}"></div>
+          </div>
+          <label>Syarat promo (opsional)</label>
+          <input data-f="promoNote" maxlength="120" value="${esc(p.promoNote)}" placeholder="mis. Khusus 10 pelanggan pertama">
           <label>Isi paket (satu baris = satu poin)</label>
           <textarea data-f="features">${esc((p.features||[]).join("\n"))}</textarea>
           <div class="item-actions">
@@ -172,11 +198,15 @@ function move(arr, i, d){ const j = i + d; if(j < 0 || j >= arr.length) return; 
 document.addEventListener("input", e => {
   const t = e.target;
   if(t.id === "wa"){ data.waNumber = t.value; return markDirty(); }
+  if(t.id === "pEn"){ data.promo.enabled = t.checked; return markDirty(); }
+  if(t.id === "pText"){ data.promo.text = t.value; return markDirty(); }
+  if(t.id === "pStart"){ data.promo.start = t.value; return markDirty(); }
+  if(t.id === "pEnd"){ data.promo.end = t.value; return markDirty(); }
   const f = t.dataset.f; if(!f) return;
   if(f === "cname"){ data.categories[+t.closest(".cat").dataset.c].name = t.value; return markDirty(); }
   const el = t.closest(".item");
   const p = data.categories[+el.dataset.c].items[+el.dataset.i];
-  if(f === "price") p.price = Number(t.value) || 0;
+  if(f === "price" || f === "promoPrice") p[f] = Number(t.value) || 0;
   else if(f === "features") p.features = t.value.split("\n").map(s => s.trim()).filter(Boolean);
   else p[f] = t.value;
   markDirty();
@@ -210,14 +240,25 @@ async function save(){
   let wa = String(data.waNumber || "").replace(/\D/g, "");
   if(wa.startsWith("0")) wa = "62" + wa.slice(1);
   if(wa.length < 9){ setStatus("Nomor WhatsApp belum benar. Contoh: 6281234567890", "err"); return; }
+  for(const c of data.categories) for(const p of c.items){
+    const pp = Number(p.promoPrice) || 0;
+    if(pp > 0 && pp >= (Number(p.price) || 0)){ setStatus(`Harga promo "${p.name}" harus lebih kecil dari harga normal.`, "err"); return; }
+    if(p.promoStart && p.promoEnd && p.promoStart > p.promoEnd){ setStatus(`Tanggal promo "${p.name}" terbalik (mulai lebih besar dari akhir).`, "err"); return; }
+  }
+  if(data.promo.start && data.promo.end && data.promo.start > data.promo.end){ setStatus("Tanggal banner promo terbalik.", "err"); return; }
   const out = {
     waNumber: wa,
+    promo: { enabled: !!data.promo.enabled, text: (data.promo.text || "").trim(), start: data.promo.start || "", end: data.promo.end || "" },
     categories: data.categories.map(c => ({
       name: (c.name || "").trim() || "Tanpa Nama",
       items: c.items.map(p => ({
         name: (p.name || "").trim() || "Paket",
         price: Number(p.price) || 0,
         badge: (p.badge || "").trim(),
+        promoPrice: Number(p.promoPrice) || 0,
+        promoStart: p.promoStart || "",
+        promoEnd: p.promoEnd || "",
+        promoNote: (p.promoNote || "").trim(),
         features: (p.features || []).map(s => s.trim()).filter(Boolean)
       }))
     }))

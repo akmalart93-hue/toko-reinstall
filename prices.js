@@ -1,5 +1,6 @@
 window.SITE_DATA = {
   "waNumber": "6281234567890",
+  "promo": { "enabled": false, "text": "🎉 Grand Opening! Diskon spesial semua paket", "start": "", "end": "" },
   "categories": [
     {
       "name": "Windows",

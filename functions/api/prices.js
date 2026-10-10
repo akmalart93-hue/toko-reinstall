@@ -17,6 +17,7 @@ async function passOk(request, env) {
 }
 
 const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const date = v => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
 
 function sanitize(d) {
   if (!d || typeof d !== "object" || !Array.isArray(d.categories)) return null;
@@ -28,10 +29,16 @@ function sanitize(d) {
       name: str(p && p.name, 100) || "Paket",
       price: Math.max(0, Math.min(1e9, Math.round(Number(p && p.price) || 0))),
       badge: str(p && p.badge, 20),
+      promoPrice: Math.max(0, Math.min(1e9, Math.round(Number(p && p.promoPrice) || 0))),
+      promoStart: date(p && p.promoStart),
+      promoEnd: date(p && p.promoEnd),
+      promoNote: str(p && p.promoNote, 120),
       features: (Array.isArray(p && p.features) ? p.features : []).slice(0, 20).map(f => str(f, 120)).filter(Boolean),
     })),
   }));
-  return { waNumber: wa, categories };
+  const pr = d.promo || {};
+  const promo = { enabled: !!pr.enabled, text: str(pr.text, 160), start: date(pr.start), end: date(pr.end) };
+  return { waNumber: wa, promo, categories };
 }
 
 // Publik: dibaca oleh website

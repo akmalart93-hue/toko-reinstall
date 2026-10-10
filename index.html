@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
 <title>Jasa Install Ulang Windows & Linux</title>
 <meta name="description" content="Jasa install ulang Windows dan Linux, cepat, rapi, bergaransi. Pesan langsung via WhatsApp.">
 <style>
@@ -38,7 +40,7 @@
   .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
   .card h3{margin-bottom:6px;font-size:17px}
   .card p{color:var(--muted);font-size:14px}
-  .ico{font-size:28px;margin-bottom:10px}
+  .ico{font-size:28px;margin-bottom:10px;height:45px;display:flex;align-items:center}
   .tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
   .tab{padding:9px 18px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-weight:600;font-size:14px}
   .tab.active{background:var(--accent2);color:#04202e;border-color:var(--accent2)}
@@ -48,6 +50,13 @@
   .price ul{list-style:none;color:var(--muted);font-size:14px}
   .price li::before{content:"✓ ";color:var(--accent)}
   .badge{display:inline-block;font-size:11px;background:var(--accent);color:#04210f;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;vertical-align:middle}
+  .hidden{display:none !important}
+  .promo-banner{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;text-align:center;padding:10px 20px;background:linear-gradient(90deg,#22c55e,#38bdf8);color:#04210f;font-weight:700;font-size:14px}
+  .promo-banner small{font-weight:600;opacity:.85}
+  .price .amt-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .price .old{color:var(--muted);text-decoration:line-through;font-size:14px;font-weight:600}
+  .off{display:inline-block;font-size:11px;background:#ef4444;color:#fff;padding:2px 8px;border-radius:999px;font-weight:700}
+  .promo-note{color:var(--accent2);font-size:12px;margin-top:4px}
   .note{color:var(--muted);font-size:13px;margin-top:16px}
   .steps{counter-reset:s}
   .step{position:relative;padding-left:52px;margin-bottom:18px}
@@ -64,6 +73,8 @@
 </style>
 </head>
 <body>
+
+<div class="promo-banner hidden" id="promoBanner"></div>
 
 <header>
   <div class="wrap">
@@ -92,9 +103,8 @@
       <h2>Layanan Kami</h2>
       <p class="sub">Semua dikerjakan teliti, driver lengkap, dan siap pakai.</p>
       <div class="grid">
-        <div class="card"><div class="ico">🪟</div><h3>Install Windows</h3><p>Windows 10 / 11 original-activation ready, driver dan aplikasi dasar lengkap.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24" width="28" height="28" fill="#00a4ef" aria-hidden="true" style="display:block"><path d="M2 4.6 10.3 3.4v7.4H2zM11.4 3.2 22 1.7v9.1H11.4zM2 11.9h8.3v7.4L2 18.1zM11.4 11.9H22v10.4l-10.6-1.5z"/></svg></div><h3>Install Windows</h3><p>Windows 10 / 11 original-activation ready, driver dan aplikasi dasar lengkap.</p></div>
         <div class="card"><div class="ico">🐧</div><h3>Install Linux</h3><p>Ubuntu, Linux Mint, Fedora, Debian, dan distro lain sesuai kebutuhan.</p></div>
-        <div class="card"><div class="ico">🔀</div><h3>Dual Boot</h3><p>Windows dan Linux dalam satu perangkat, data aman tanpa hilang.</p></div>
         <div class="card"><div class="ico">🛠️</div><h3>Service Software</h3><p>Bersihkan virus, atasi bootloop, blue screen, dan setting ulang performa.</p></div>
       </div>
     </div>
@@ -155,6 +165,7 @@
 <script>
 /* Nama toko di sini. Nomor WA & harga diatur lewat admin.html (data awal: prices.js) */
 const CONFIG = { brand: "ReInstall.id", waNumber: SITE_DATA.waNumber };
+let PROMO = null;
 let PRICES = Object.fromEntries(SITE_DATA.categories.map(c => [c.name, c.items]));
 
 const rupiah = n => "Rp " + n.toLocaleString("id-ID");
@@ -172,26 +183,56 @@ function setWaLinks(){
 const tabsEl = document.getElementById("tabs");
 const gridEl = document.getElementById("priceGrid");
 
+const esc = x => String(x ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); };
+const inRange = (s, e) => { const t = todayStr(); return (!s || t >= s) && (!e || t <= e); };
+const fmtDate = s => new Date(s + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+function promoOf(p){
+  const pp = Number(p.promoPrice) || 0;
+  if(pp > 0 && pp < p.price && inRange(p.promoStart, p.promoEnd)) return { price: pp, off: Math.round((1 - pp / p.price) * 100) };
+  return null;
+}
+function renderBanner(){
+  const b = document.getElementById("promoBanner");
+  b.textContent = "";
+  if(PROMO && PROMO.enabled && PROMO.text && inRange(PROMO.start, PROMO.end)){
+    b.textContent = PROMO.text;
+    if(PROMO.end){ const sm = document.createElement("small"); sm.textContent = "s/d " + fmtDate(PROMO.end); b.appendChild(sm); }
+    b.classList.remove("hidden");
+  } else b.classList.add("hidden");
+}
+
 function render(cat){
   tabsEl.innerHTML = Object.keys(PRICES).map(k =>
     `<button class="tab ${k===cat?"active":""}" data-cat="${k}">${k}</button>`).join("");
-  gridEl.innerHTML = (PRICES[cat] || []).map(p => `
+  gridEl.innerHTML = (PRICES[cat] || []).map(p => {
+    const pr = promoOf(p);
+    const msg = pr
+      ? `Halo, saya mau pesan paket "${p.name}" (promo ${rupiah(pr.price)}, normal ${rupiah(p.price)}).`
+      : `Halo, saya mau pesan paket "${p.name}" (${rupiah(p.price)}).`;
+    return `
     <div class="card price">
       <div>
-        <div class="name">${p.name}${p.badge?`<span class="badge">${p.badge}</span>`:""}</div>
-        <div class="amt">${rupiah(p.price)}</div>
+        <div class="name">${esc(p.name)}${p.badge?`<span class="badge">${esc(p.badge)}</span>`:""}</div>
+        <div class="amt-row">
+          <div class="amt">${rupiah(pr ? pr.price : p.price)}</div>
+          ${pr ? `<span class="old">${rupiah(p.price)}</span><span class="off">-${pr.off}%</span>` : ""}
+        </div>
+        ${pr && p.promoNote ? `<div class="promo-note">🎁 ${esc(p.promoNote)}</div>` : ""}
       </div>
-      <ul>${(p.features || []).map(f=>`<li>${f}</li>`).join("")}</ul>
-      <a class="btn" target="_blank" rel="noopener"
-         href="${waLink(`Halo, saya mau pesan paket "${p.name}" (${rupiah(p.price)}).`)}">Pesan</a>
-    </div>`).join("");
+      <ul>${(p.features || []).map(f=>`<li>${esc(f)}</li>`).join("")}</ul>
+      <a class="btn" target="_blank" rel="noopener" href="${waLink(msg)}">Pesan</a>
+    </div>`;
+  }).join("");
   tabsEl.querySelectorAll(".tab").forEach(b => b.onclick = () => render(b.dataset.cat));
 }
 function applyData(d){
   CONFIG.waNumber = d.waNumber;
+  PROMO = d.promo || null;
   PRICES = Object.fromEntries(d.categories.map(c => [c.name, c.items]));
   setWaLinks();
   render(Object.keys(PRICES)[0]);
+  renderBanner();
 }
 /* Ambil harga terbaru dari admin (Cloudflare). Kalau belum ada, pakai prices.js */
 fetch("/api/prices", { cache: "no-store" })

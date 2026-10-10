@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Admin - Price List</title>
+<style>
+  :root{--bg:#0b1220;--card:#121b2e;--card2:#17233b;--text:#e8eefc;--muted:#93a1c0;--accent:#22c55e;--accent2:#38bdf8;--border:#22304d;--danger:#ef4444}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;padding-bottom:90px}
+  .wrap{max-width:860px;margin:0 auto;padding:0 18px}
+  h1{font-size:22px;margin:24px 0 4px}
+  .hint{color:var(--muted);font-size:13px;margin-bottom:18px}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 11px;font:inherit;font-size:14px}
+  input:focus,textarea:focus{outline:2px solid var(--accent2);outline-offset:-1px}
+  textarea{min-height:84px;resize:vertical}
+  .box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px}
+  .cat-head{display:flex;gap:8px;align-items:flex-end}
+  .cat-head > div{flex:1}
+  .item{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:12px}
+  .row{display:flex;flex-wrap:wrap;gap:10px}
+  .row > div{flex:1 1 140px}
+  .row > div:first-child{flex:2 1 220px}
+  .item-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  button{font:inherit;font-size:13px;font-weight:600;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);padding:8px 12px;cursor:pointer}
+  button:hover{border-color:var(--accent2)}
+  button:disabled{opacity:.5;cursor:default}
+  button.primary{background:var(--accent);color:#04210f;border-color:var(--accent)}
+  button.danger{color:var(--danger)}
+  button.danger:hover{border-color:var(--danger)}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:rgba(11,18,32,.95);backdrop-filter:blur(8px);border-top:1px solid var(--border);padding:12px 0}
+  .bar .wrap{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .bar .status{color:var(--muted);font-size:12px;flex:1;min-width:120px}
+  .status.ok{color:var(--accent)} .status.err{color:var(--danger)}
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px}
+  #login .box{width:100%;max-width:340px;margin:0}
+  #login h1{margin-top:0}
+  .err{color:var(--danger);font-size:13px;margin-top:10px;min-height:20px}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <form class="box" id="loginForm">
+    <h1>Admin</h1>
+    <p class="hint">Masukkan password admin.</p>
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" autofocus>
+    <button class="primary" style="width:100%;margin-top:12px" id="loginBtn">Masuk</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <div class="wrap">
+    <h1>Admin Price List</h1>
+    <p class="hint">Edit lalu klik <b>Simpan</b>. Website langsung ikut berubah.</p>
+
+    <div class="box">
+      <label for="wa">Nomor WhatsApp (format 62812xxxxxxx)</label>
+      <input id="wa" inputmode="numeric" placeholder="6281234567890">
+    </div>
+
+    <div id="cats"></div>
+    <button data-act="addcat">+ Tambah Kategori</button>
+  </div>
+
+  <div class="bar">
+    <div class="wrap">
+      <span class="status" id="status"></span>
+      <button data-act="logout">Keluar</button>
+      <button class="primary" data-act="save" id="saveBtn">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="prices.js"></script>
+<script>
+const PW_KEY = "reinstall_admin_pw";
+const clone = x => JSON.parse(JSON.stringify(x));
+const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+const $ = id => document.getElementById(id);
+
+let pw = "";
+try{ pw = sessionStorage.getItem(PW_KEY) || ""; }catch(e){}
+let data = null, dirty = false;
+
+function api(method, body){
+  return fetch("/api/prices", {
+    method, cache: "no-store",
+    headers: { "content-type": "application/json", "x-admin-password": pw },
+    body: body ? JSON.stringify(body) : undefined
+  });
+}
+function setStatus(msg, cls){ const s = $("status"); s.textContent = msg; s.className = "status " + (cls || ""); }
+function markDirty(){ dirty = true; setStatus("Ada perubahan yang belum disimpan."); }
+
+async function login(p){
+  pw = p;
+  let r;
+  try{ r = await api("POST"); }
+  catch(e){ return "Tidak bisa terhubung. Admin hanya jalan setelah website online di Cloudflare."; }
+  if(r.ok){ try{ sessionStorage.setItem(PW_KEY, pw); }catch(e){} return ""; }
+  let m = ""; try{ m = (await r.json()).error; }catch(e){}
+  return m || "Gagal masuk.";
+}
+
+async function loadData(){
+  try{
+    const r = await api("GET");
+    if(r.ok) return await r.json();
+  }catch(e){}
+  return clone(window.SITE_DATA);   // belum pernah disimpan -> pakai data awal
+}
+
+async function enter(){
+  data = await loadData();
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  render();
+  setStatus("");
+}
+
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("loginBtn").disabled = true; $("loginErr").textContent = "";
+  const err = await login($("pw").value);
+  $("loginBtn").disabled = false;
+  if(err){ $("loginErr").textContent = err; return; }
+  enter();
+});
+
+(async () => {   // auto-login kalau sesi masih ada
+  if(!pw) return;
+  const err = await login(pw);
+  if(!err) enter();
+})();
+
+function render(){
+  $("wa").value = data.waNumber || "";
+  $("cats").innerHTML = data.categories.map((c, ci) => `
+    <div class="box cat" data-c="${ci}">
+      <div class="cat-head">
+        <div><label>Nama kategori (tab)</label><input data-f="cname" value="${esc(c.name)}"></div>
+        <button data-act="catup" title="Naik">↑</button>
+        <button data-act="catdown" title="Turun">↓</button>
+        <button class="danger" data-act="delcat">Hapus</button>
+      </div>
+      ${c.items.map((p, pi) => `
+        <div class="item" data-c="${ci}" data-i="${pi}">
+          <div class="row">
+            <div><label>Nama paket</label><input data-f="name" value="${esc(p.name)}"></div>
+            <div><label>Harga (Rp)</label><input data-f="price" type="number" min="0" step="1000" value="${Number(p.price)||0}"></div>
+            <div><label>Label (opsional, mis. Populer)</label><input data-f="badge" value="${esc(p.badge)}"></div>
+          </div>
+          <label>Isi paket (satu baris = satu poin)</label>
+          <textarea data-f="features">${esc((p.features||[]).join("\n"))}</textarea>
+          <div class="item-actions">
+            <button data-act="up">↑ Naik</button>
+            <button data-act="down">↓ Turun</button>
+            <button class="danger" data-act="delitem">Hapus paket</button>
+          </div>
+        </div>`).join("")}
+      <div class="item-actions" style="margin-top:14px"><button data-act="additem">+ Tambah Paket</button></div>
+    </div>`).join("");
+}
+
+function move(arr, i, d){ const j = i + d; if(j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; }
+
+document.addEventListener("input", e => {
+  const t = e.target;
+  if(t.id === "wa"){ data.waNumber = t.value; return markDirty(); }
+  const f = t.dataset.f; if(!f) return;
+  if(f === "cname"){ data.categories[+t.closest(".cat").dataset.c].name = t.value; return markDirty(); }
+  const el = t.closest(".item");
+  const p = data.categories[+el.dataset.c].items[+el.dataset.i];
+  if(f === "price") p.price = Number(t.value) || 0;
+  else if(f === "features") p.features = t.value.split("\n").map(s => s.trim()).filter(Boolean);
+  else p[f] = t.value;
+  markDirty();
+});
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-act]"); if(!b) return;
+  const act = b.dataset.act;
+  const catEl = b.closest(".cat"), itemEl = b.closest(".item");
+  const ci = catEl ? +catEl.dataset.c : -1;
+  const pi = itemEl ? +itemEl.dataset.i : -1;
+
+  if(act === "save") return save();
+  if(act === "logout"){
+    if(dirty && !confirm("Ada perubahan belum disimpan. Tetap keluar?")) return;
+    try{ sessionStorage.removeItem(PW_KEY); }catch(e){}
+    dirty = false; location.reload(); return;
+  }
+  if(act === "addcat") data.categories.push({ name: "Kategori Baru", items: [] });
+  else if(act === "delcat"){ if(!confirm(`Hapus kategori "${data.categories[ci].name}" beserta semua paketnya?`)) return; data.categories.splice(ci, 1); }
+  else if(act === "catup") move(data.categories, ci, -1);
+  else if(act === "catdown") move(data.categories, ci, 1);
+  else if(act === "additem") data.categories[ci].items.push({ name: "Paket Baru", price: 0, badge: "", features: [] });
+  else if(act === "delitem"){ if(!confirm("Hapus paket ini?")) return; data.categories[ci].items.splice(pi, 1); }
+  else if(act === "up") move(data.categories[ci].items, pi, -1);
+  else if(act === "down") move(data.categories[ci].items, pi, 1);
+  render(); markDirty();
+});
+
+async function save(){
+  let wa = String(data.waNumber || "").replace(/\D/g, "");
+  if(wa.startsWith("0")) wa = "62" + wa.slice(1);
+  if(wa.length < 9){ setStatus("Nomor WhatsApp belum benar. Contoh: 6281234567890", "err"); return; }
+  const out = {
+    waNumber: wa,
+    categories: data.categories.map(c => ({
+      name: (c.name || "").trim() || "Tanpa Nama",
+      items: c.items.map(p => ({
+        name: (p.name || "").trim() || "Paket",
+        price: Number(p.price) || 0,
+        badge: (p.badge || "").trim(),
+        features: (p.features || []).map(s => s.trim()).filter(Boolean)
+      }))
+    }))
+  };
+  $("saveBtn").disabled = true; setStatus("Menyimpan...");
+  try{
+    const r = await api("PUT", out);
+    if(r.ok){ data = out; dirty = false; setStatus("Tersimpan ✓ website sudah terupdate.", "ok"); }
+    else { let m = ""; try{ m = (await r.json()).error; }catch(e){} setStatus(m || "Gagal menyimpan.", "err"); }
+  }catch(e){ setStatus("Gagal terhubung ke server.", "err"); }
+  $("saveBtn").disabled = false;
+}
+
+window.addEventListener("beforeunload", e => { if(dirty){ e.preventDefault(); e.returnValue = ""; } });
+</script>
+</body>
+</html>
